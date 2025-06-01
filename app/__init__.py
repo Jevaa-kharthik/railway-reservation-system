@@ -1,4 +1,4 @@
-from flask import Flask, request, redirect, flash, session, render_template, url_for
+from flask import Flask, request, redirect, flash, session, render_template, url_for, abort
 from flask_migrate import Migrate
 from flask_bcrypt import Bcrypt
 from models.models import db, User, Train, Booking, Passenger
@@ -65,15 +65,19 @@ def login():
         username = request.form['username']
         password = request.form['password']
 
-        user = User.query.filter_by(username=username).first()
-        if user and bcrypt.check_password_hash(user.password, password):
-            session['user_id'] = user.id
-            return redirect('/dashboard')
+    user = User.query.filter_by(username=username).first()
+    if user and bcrypt.check_password_hash(user.password, password):
+        session['user_id'] = user.id
+        session['username'] = user.username
+        flash('Login successful!', 'success')
 
-        flash('Invalid username or password.', 'danger')
-        return redirect('/login')
+        trains = Train.query.order_by(Train.departure_time).all()
+        upcoming_bookings = Booking.query.filter_by(user_id=user.id).all()
 
-    return render_template('login.html')
+        return render_template('dashboard.html', username=user.username, trains=trains, upcoming_bookings=upcoming_bookings)
+
+    flash('Invalid username or password.', 'danger')
+    return redirect('/login')
 
 @app.route('/logout')
 def logout():
@@ -84,9 +88,11 @@ def logout():
 @app.route('/dashboard')
 @login_required
 def dashboard():
-    username = session.get('username')
+    user_id = session.get('user_id')
+    user = User.query.get(user_id)
+    username = user.username if user else 'Guest'
     trains = Train.query.order_by(Train.departure_time).all()
-    upcoming_bookings = Booking.query.filter_by(user_id=session.get('user_id')).all()
+    upcoming_bookings = Booking.query.filter_by(user_id=user_id).all()
     return render_template('dashboard.html', username=username, trains=trains, upcoming_bookings=upcoming_bookings)
 
 @app.route('/train_list')
@@ -94,10 +100,16 @@ def train_list():
     # your logic here (fetching train data, rendering template, etc.)
     return render_template('train_list.html', trains=Train.query.all())
 
+@app.route('/booking_success/<int:train_id>')
+@login_required
+def booking_success(train_id):
+    train = Train.query.get_or_404(train_id)
+    return render_template('booking_success.html', train=train, booking_date=date.today())
+
 @app.route('/book/<int:train_id>', methods=['GET', 'POST'])
 @login_required
 def book(train_id):
-    train = Train.query.get(train_id)
+    train = Train.query.get_or_404(train_id)
 
     if request.method == 'POST':
         seats = int(request.form['seats'])
@@ -106,17 +118,29 @@ def book(train_id):
         if not passenger_names or len(passenger_names) < 1:
             return "At least one passenger name is required.", 400
 
-        first_name = passenger_names[0]  # ✅ Use only the first name
+        if seats > train.seats_available:
+            flash('Not enough seats available.', 'danger')
+            return redirect(url_for('book', train_id=train_id))
 
         new_booking = Booking(
             user_id=session['user_id'],
             train_id=train_id,
-            passenger_name=first_name,
-            seats=seats,
             booking_date=date.today()
         )
         db.session.add(new_booking)
-        db.session.commit()
+        db.session.flush()  # This assigns an id to new_booking without committing
+
+        for pname in passenger_names:
+            passenger = Passenger(
+                booking_id=new_booking.id,
+                name=pname
+            )
+            db.session.add(passenger)
+
+        # Update seats available on the train
+        train.seats_available -= seats
+
+        db.session.commit()  # Commit all changes
 
         return redirect(url_for('booking_success', train_id=train_id))
 
@@ -214,9 +238,57 @@ def contact():
         mail.send(msg)
 
         flash("Thank you for contacting us! We'll get back to you soon.", "success")
-        return redirect(url_for('contact'))
+        return render_template('contact.html', success=True)
 
     return render_template('contact.html')
+
+@app.route('/cancel')
+@login_required
+def cancel_ticket():
+    user_id = session['user_id']
+    bookings = Booking.query.filter_by(user_id=user_id).all()
+    return render_template('cancel_ticket.html', bookings=bookings)
+
+@app.route('/cancel/<int:booking_id>', methods=['POST'])
+@login_required
+def cancel_specific_ticket(booking_id):
+    booking = Booking.query.get_or_404(booking_id)
+    if booking.user_id != session['user_id']:
+        abort(403)
+
+    db.session.delete(booking)  # This will also delete passengers due to cascade
+    db.session.commit()
+    flash("Booking canceled successfully.", "success")
+    return render_template('cancel_ticket.html', bookings=Booking.query.filter_by(user_id=session['user_id']).all())
+
+@app.route('/profile', methods=['GET', 'POST'])
+@login_required
+def update_profile():
+    user = User.query.get(session['user_id'])
+
+    if request.method == 'POST':
+        username = request.form['username'].strip()
+        email = request.form.get('email', '').strip()
+        password = request.form.get('password', '').strip()
+
+        # Check if username is already taken by other users
+        if User.query.filter(User.username == username, User.id != user.id).first():
+            flash('Username already taken. Please choose another.', 'danger')
+            return redirect(url_for('update_profile'))
+
+        user.username = username
+        user.email = email if email else None
+
+        if password:
+            hashed_password = bcrypt.generate_password_hash(password).decode('utf-8')
+            user.password = hashed_password
+
+        db.session.commit()
+        flash('Profile updated successfully!', 'success')
+        # Render the same page with updated user info and flash message
+        return render_template('update_profile.html', user=user)
+
+    return render_template('update_profile.html', user=user)
 
 if __name__ == '__main__':
     app.run(debug=True, port=8080)

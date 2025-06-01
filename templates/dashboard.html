@@ -22,39 +22,19 @@
     <!-- Main Dashboard -->
     <div class="container mt-5">
         <h2 class="mb-4">Welcome, {{ username }}!</h2>
-
-        <!-- Upcoming Bookings -->
-        <div class="card mb-4">
-            <div class="card-header bg-success text-white">Upcoming Bookings</div>
-            <ul class="list-group list-group-flush">
-                {% if upcoming_bookings %}
-                    {% for booking in upcoming_bookings %}
-                        <li class="list-group-item">
-                            <strong>Train:</strong> {{ booking.train_name }} |
-                            <strong>Date:</strong> {{ booking.date }} |
-                            <strong>Time:</strong> {{ booking.time }} |
-                            <strong>Seat:</strong> {{ booking.seat_class }}
-                        </li>
-                    {% endfor %}
-                {% else %}
-                    <li class="list-group-item text-muted">No upcoming bookings.</li>
-                {% endif %}
-            </ul>
-        </div>
-
         <!-- Dashboard Actions -->
         <div class="row g-4 mb-4">
             <div class="col-md-3">
                 <a href="{{ url_for('train_list') }}" class="btn btn-primary w-100">🔍 Search Trains</a>
             </div>
             <div class="col-md-3">
-                <a href="/bookings" class="btn btn-secondary w-100">📜 Booking History</a>
+                <a href="/booking_history" class="btn btn-secondary w-100">📜 Booking History</a>
             </div>
             <div class="col-md-3">
                 <a href="/add_train" class="btn btn-success w-100">➕ Add Train</a>
             </div>
             <div class="col-md-3">
-                <a href="/cancel" class="btn btn-danger w-100">❌ Cancel Ticket</a>
+                <a href="{{ url_for('cancel_ticket') }}" class="btn btn-danger w-100">❌ Cancel Ticket</a>
             </div>
             <div class="col-md-3">
                 <a href="/profile" class="btn btn-info w-100">👤 Update Profile</a>
