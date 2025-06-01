@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Bookings</title>
+</head>
+<body>
+    <h1>Your Bookings</h1>
+    <table>
+        <thead>
+            <tr>
+                <th>Booking ID</th>
+                <th>Train ID</th>
+                <th>Booking Date</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for booking in bookings %}
+            <tr>
+                <td>{{ booking.id }}</td>
+                <td>{{ booking.train_id }}</td>
+                <td>{{ booking.booking_date }}</td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="3">No bookings found.</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    <a href="/dashboard">Back to Dashboard</a>
+</body>
+</html>

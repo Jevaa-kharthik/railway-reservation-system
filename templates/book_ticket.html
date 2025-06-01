@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Book Ticket</title>
+</head>
+<body>
+    <h1>Book Ticket for {{ train.name }}</h1>
+    <p>Source: {{ train.source }}</p>
+    <p>Destination: {{ train.destination }}</p>
+    <p>Available Seats: {{ train.seats_available }}</p>
+
+    <form method="POST">
+        <button type="submit">Confirm Booking</button>
+    </form>
+    <a href="{{ url_for('dashboard') }}">Cancel</a>
+</body>
+</html>

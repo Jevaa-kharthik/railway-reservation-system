@@ -1,0 +1,26 @@
+{
+    "sqltools.connections": [
+        {
+            "name": "Local MySQL",
+            "driver": "MySQL",
+            "server": "localhost",
+            "port": 3306,
+            "username": "root",
+            "password": "superman@123",
+            "database": "HEXAWARE"
+        },
+        {
+            "mysqlOptions": {
+                "authProtocol": "default",
+                "enableSsl": "Disabled"
+            },
+            "previewLimit": 50,
+            "server": "localhost",
+            "port": 3306,
+            "driver": "MySQL",
+            "name": "Local MYSQL Server",
+            "database": "train_booking_system",
+            "username": "jevaakharthik"
+        }
+    ]
+}
