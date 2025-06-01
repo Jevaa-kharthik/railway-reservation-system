@@ -65,25 +65,22 @@ def login():
         username = request.form['username']
         password = request.form['password']
 
-    user = User.query.filter_by(username=username).first()
-    if user and bcrypt.check_password_hash(user.password, password):
-        session['user_id'] = user.id
-        session['username'] = user.username
-        flash('Login successful!', 'success')
+        user = User.query.filter_by(username=username).first()
+        if user and bcrypt.check_password_hash(user.password, password):
+            session['user_id'] = user.id
+            session['username'] = user.username
+            session['is_admin'] = user.is_admin
+            return redirect('/dashboard')
 
-        trains = Train.query.order_by(Train.departure_time).all()
-        upcoming_bookings = Booking.query.filter_by(user_id=user.id).all()
+        flash('Invalid username or password.', 'danger')
+        return render_template('login.html')
 
-        return render_template('dashboard.html', username=user.username, trains=trains, upcoming_bookings=upcoming_bookings)
-
-    flash('Invalid username or password.', 'danger')
-    return redirect('/login')
+    return render_template('login.html')
 
 @app.route('/logout')
 def logout():
     session.pop('user_id', None)
-    flash('You have been logged out.', 'info')
-    return redirect('/')
+    return render_template('home.html')
 
 @app.route('/dashboard')
 @login_required
@@ -91,9 +88,10 @@ def dashboard():
     user_id = session.get('user_id')
     user = User.query.get(user_id)
     username = user.username if user else 'Guest'
+    is_admin = user.is_admin if user and hasattr(user, 'is_admin') else False
     trains = Train.query.order_by(Train.departure_time).all()
     upcoming_bookings = Booking.query.filter_by(user_id=user_id).all()
-    return render_template('dashboard.html', username=username, trains=trains, upcoming_bookings=upcoming_bookings)
+    return render_template('dashboard.html', username=username, email=user.email ,trains=trains, upcoming_bookings=upcoming_bookings, is_admin=is_admin)
 
 @app.route('/train_list')
 def train_list():
@@ -271,13 +269,13 @@ def update_profile():
         email = request.form.get('email', '').strip()
         password = request.form.get('password', '').strip()
 
-        # Check if username is already taken by other users
+        # Check if username is taken by other users
         if User.query.filter(User.username == username, User.id != user.id).first():
             flash('Username already taken. Please choose another.', 'danger')
             return redirect(url_for('update_profile'))
 
         user.username = username
-        user.email = email if email else None
+        user.email = email if email else None  # Store email here
 
         if password:
             hashed_password = bcrypt.generate_password_hash(password).decode('utf-8')
@@ -285,9 +283,8 @@ def update_profile():
 
         db.session.commit()
         flash('Profile updated successfully!', 'success')
-        # Render the same page with updated user info and flash message
         return render_template('update_profile.html', user=user)
-
+    
     return render_template('update_profile.html', user=user)
 
 if __name__ == '__main__':

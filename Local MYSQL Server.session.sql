@@ -52,3 +52,8 @@ VALUES
 
 select * from trains;
 
+alter table users add COLUMN is_admin boolean default false;
+
+select * from users;
+
+update users set is_admin = true where username = 'admin';
