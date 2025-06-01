@@ -30,7 +30,14 @@ CREATE TABLE IF NOT EXISTS bookings (
     FOREIGN KEY (train_id) REFERENCES trains(id)
 );
 
-INSERT INTO trains (name, source, destination, seats_available, depature_time)
+CREATE TABLE IF NOT EXISTS passengers (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    booking_id INT NOT NULL,
+    name VARCHAR(100) NOT NULL,
+    FOREIGN KEY (booking_id) REFERENCES bookings(id) ON DELETE CASCADE
+);
+
+INSERT INTO trains (name, source, destination, seats_available, departure_time)
 VALUES
 ('Chennai Express', 'Chennai', 'Mumbai', 120, '06:00:00'),
 ('Bangalore Superfast', 'Bangalore', 'Delhi', 80, '07:30:00'),
@@ -45,4 +52,3 @@ VALUES
 
 select * from trains;
 
-SELECT * FROM trains ORDER BY depature_time

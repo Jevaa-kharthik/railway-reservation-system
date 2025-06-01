@@ -1,15 +1,28 @@
-from flask import Flask, request, redirect, flash, session, render_template
+from flask import Flask, request, redirect, flash, session, render_template, url_for
 from flask_migrate import Migrate
 from flask_bcrypt import Bcrypt
-from models.models import db, User, Train, Booking
+from models.models import db, User, Train, Booking, Passenger
 from utils.auth import login_required
-from datetime import date, datetime
+from datetime import date, time
 from sqlalchemy import text
 import os
-from flask import Flask
+from app import db
+from flask_mail import Mail, Message
+import re
+# from .models import Train  # Removed duplicate and problematic import
 
+bcrypt = None  # will be set after app is created
+mail = Mail()
 
 app = Flask(__name__, template_folder=os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'templates'))
+
+# Mail configuration
+app.config['MAIL_SERVER'] = 'smtp.gmail.com'
+app.config['MAIL_PORT'] = 587
+app.config['MAIL_USE_TLS'] = True
+app.config['MAIL_USERNAME'] = os.environ.get('MAIL_USERNAME')
+app.config['MAIL_PASSWORD'] = os.environ.get('MAIL_PASSWORD')
+mail.init_app(app)
 bcrypt = Bcrypt(app)
 
 # Configuration
@@ -55,7 +68,6 @@ def login():
         user = User.query.filter_by(username=username).first()
         if user and bcrypt.check_password_hash(user.password, password):
             session['user_id'] = user.id
-            flash('Logged in successfully!', 'success')
             return redirect('/dashboard')
 
         flash('Invalid username or password.', 'danger')
@@ -69,36 +81,45 @@ def logout():
     flash('You have been logged out.', 'info')
     return redirect('/')
 
-@app.route('/trainlist')
-@login_required
-def train_list():
-    try:
-        trains = Train.query.all()
-    except Exception as e:
-        # Log or print error
-        print(f"Error fetching trains: {e}")
-        flash("Could not load trains, please try again later.", "danger")
-        trains = []
-    return render_template('trainlist.html', trains=trains)
-
 @app.route('/dashboard')
 @login_required
 def dashboard():
-    return render_template('dashboard.html')
+    username = session.get('username')
+    trains = Train.query.order_by(Train.departure_time).all()
+    upcoming_bookings = Booking.query.filter_by(user_id=session.get('user_id')).all()
+    return render_template('dashboard.html', username=username, trains=trains, upcoming_bookings=upcoming_bookings)
+
+@app.route('/train_list')
+def train_list():
+    # your logic here (fetching train data, rendering template, etc.)
+    return render_template('train_list.html', trains=Train.query.all())
 
 @app.route('/book/<int:train_id>', methods=['GET', 'POST'])
 @login_required
 def book(train_id):
-    train = Train.query.get_or_404(train_id)
+    train = Train.query.get(train_id)
+
     if request.method == 'POST':
-        if train.seats_available > 0:
-            train.seats_available -= 1
-            booking = Booking(user_id=session['user_id'], train_id=train_id, booking_date=date.today())
-            db.session.add(booking)
-            db.session.commit()
-            return render_template('booking_success.html', train=train)
-        flash('No seats available for this train.', 'warning')
-        return redirect(f'/book/{train_id}')
+        seats = int(request.form['seats'])
+        passenger_names = request.form.getlist('passenger_names')
+
+        if not passenger_names or len(passenger_names) < 1:
+            return "At least one passenger name is required.", 400
+
+        first_name = passenger_names[0]  # ✅ Use only the first name
+
+        new_booking = Booking(
+            user_id=session['user_id'],
+            train_id=train_id,
+            passenger_name=first_name,
+            seats=seats,
+            booking_date=date.today()
+        )
+        db.session.add(new_booking)
+        db.session.commit()
+
+        return redirect(url_for('booking_success', train_id=train_id))
+
     return render_template('book_ticket.html', train=train)
 
 @app.route('/mybookings')
@@ -107,6 +128,39 @@ def my_bookings():
     bookings = Booking.query.filter_by(user_id=session['user_id']).all()
     return render_template('view_bookings.html', bookings=bookings)
 
+@app.route('/add_train', methods=['GET', 'POST'])
+def add_train():
+    if request.method == 'POST':
+        # Extract data from form
+        name = request.form['name']
+        source = request.form['source']
+        destination = request.form['destination']
+        seats = int(request.form['seats'])
+        departure_time_str = request.form['departure_time']  # 'HH:MM' string
+
+        # Convert string to time object
+        hour, minute = map(int, departure_time_str.split(':'))
+        departure_time = time(hour, minute)
+
+        # Create new train object
+        new_train = Train(
+            name=name,
+            source=source,
+            destination=destination,
+            seats_available=seats,
+            departure_time=departure_time
+        )
+
+        # Add and commit to DB
+        db.session.add(new_train)
+        db.session.commit()
+
+        # Redirect back to dashboard or train list page
+        return redirect(url_for('dashboard'))
+
+    # GET request - show form
+    return render_template('add_train.html')
+
 @app.route('/test-db')
 def test_db():
     try:
@@ -114,6 +168,55 @@ def test_db():
         return '✅ Database connection is successful!'
     except Exception as e:
         return f'❌ Database connection failed: {str(e)}'
+    
+@app.route('/booking_history')
+@login_required
+def booking_history():
+    user_id = session['user_id']
+    
+    bookings = Booking.query.filter_by(user_id=user_id).order_by(Booking.booking_date.desc()).all()
+
+    booking_details = []
+    for booking in bookings:
+        passengers = Passenger.query.filter_by(booking_id=booking.id).all()
+        train = Train.query.get(booking.train_id)
+        
+        # Join passenger names into a comma-separated string
+        passenger_names = ", ".join([p.name for p in passengers])
+        
+        booking_details.append({
+            'booking': booking,
+            'train': train,
+            'passenger_names': passenger_names
+        })
+
+    return render_template('booking_history.html', booking_details=booking_details)
+
+@app.route('/contact', methods=['GET', 'POST'])
+def contact():
+    if request.method == 'POST':
+        name = request.form['name']
+        email = request.form['email']
+        message = request.form['message']
+
+        # Email format validation
+        email_regex = r'^[\w\.-]+@[\w\.-]+\.\w+$'
+        if not re.match(email_regex, email):
+            flash('Please enter a valid email address.', 'danger')
+            return redirect(url_for('contact'))
+
+        msg = Message(
+            subject=f"New Contact Form Submission from {name}",
+            sender=app.config['MAIL_USERNAME'],
+            recipients=['your_admin_email@example.com'],
+            body=f"Name: {name}\nEmail: {email}\nMessage:\n{message}"
+        )
+        mail.send(msg)
+
+        flash("Thank you for contacting us! We'll get back to you soon.", "success")
+        return redirect(url_for('contact'))
+
+    return render_template('contact.html')
 
 if __name__ == '__main__':
-    app.run(debug=True, port=5002)
+    app.run(debug=True, port=8080)

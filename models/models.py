@@ -16,7 +16,7 @@ class Train(db.Model):
     name = db.Column(db.String(100))
     source = db.Column(db.String(100))
     destination = db.Column(db.String(100))
-    departure_time = db.Column(db.DateTime)
+    departure_time = db.Column(db.Time, nullable=False)
     seats_available = db.Column(db.Integer)
 
 class Booking(db.Model):
@@ -25,3 +25,10 @@ class Booking(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     train_id = db.Column(db.Integer, db.ForeignKey('trains.id'), nullable=False)
     booking_date = db.Column(db.Date, nullable=False)
+    
+class Passenger(db.Model):
+    __tablename__ = 'passengers'
+    id = db.Column(db.Integer, primary_key=True)
+    booking_id = db.Column(db.Integer, db.ForeignKey('bookings.id'), nullable=False)
+    name = db.Column(db.String(100), nullable=False)
+    booking = db.relationship('Booking', backref=db.backref('passengers', lazy=True))
