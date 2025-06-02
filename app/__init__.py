@@ -287,5 +287,18 @@ def update_profile():
     
     return render_template('update_profile.html', user=user)
 
+app.route('/admin')
+@login_required
+def admin_dashboard():
+    if not session.get('is_admin'):
+        flash('Access denied. Admins only.', 'danger')
+        return redirect(url_for('dashboard'))
+
+    users = User.query.all()
+    trains = Train.query.all()
+    bookings = Booking.query.all()
+    return render_template('admin_dashboard.html', users=users, trains=trains, bookings=bookings)
+
+
 if __name__ == '__main__':
     app.run(debug=True, port=8080)
